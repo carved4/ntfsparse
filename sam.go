@@ -42,15 +42,28 @@ func parseSAM(data []byte, bootKey []byte) {
 				
 				var rid uint32
 				found := false
+				
 				for _, vk := range values {
-					if vk.DataType == 4 && len(vk.Data) >= 4 {
-						rid = binary.LittleEndian.Uint32(vk.Data[:4])
-						found = true
-						break
+					if len(vk.Data) >= 4 {
+						if vk.DataType == 4 || vk.DataType == 0 {
+							rid = binary.LittleEndian.Uint32(vk.Data[:4])
+							found = true
+							break
+						}
 					}
 				}
 				
-				if found {
+				if !found && len(values) > 0 {
+					for _, vk := range values {
+						if (vk.Name == "(Default)" || vk.Name == "") && len(vk.Data) >= 4 {
+							rid = binary.LittleEndian.Uint32(vk.Data[:4])
+							found = true
+							break
+						}
+					}
+				}
+				
+				if found && rid > 0 {
 					userMap[rid] = username
 				}
 			}
@@ -68,6 +81,24 @@ func parseSAM(data []byte, bootKey []byte) {
 			fmt.Sscanf(ridHex, "%x", &rid)
 			
 			username := userMap[rid]
+			
+			values := hive.GetValues(subkey)
+			
+			if username == "" {
+				for _, vk := range values {
+					if vk.Name == "V" && len(vk.Data) >= 0x30 {
+						nameOffset := binary.LittleEndian.Uint32(vk.Data[0x0C:0x10]) + 0xCC
+						nameLen := binary.LittleEndian.Uint32(vk.Data[0x10:0x14])
+						
+						if nameLen > 0 && int(nameOffset+nameLen) <= len(vk.Data) {
+							nameBytes := vk.Data[nameOffset : nameOffset+nameLen]
+							username = utf16ToString(nameBytes)
+						}
+						break
+					}
+				}
+			}
+			
 			if username == "" {
 				username = "unknown"
 			}
@@ -75,7 +106,6 @@ func parseSAM(data []byte, bootKey []byte) {
 			fmt.Printf("\n[+] user: %s\n", username)
 			fmt.Printf("    rid: %d (0x%08x)\n", rid, rid)
 			
-			values := hive.GetValues(subkey)
 			for _, vk := range values {
 				if vk.Name == "F" && len(vk.Data) >= 0x38 {
 					flags := binary.LittleEndian.Uint32(vk.Data[0x38:0x3C])

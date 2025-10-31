@@ -7,12 +7,12 @@ import (
 )
 
 const (
-	HIVE_SIGNATURE = 0x66676572 // "regf"
-	NK_SIGNATURE   = 0x6B6E     // "nk" - Key node
-	VK_SIGNATURE   = 0x6B76     // "vk" - Value key
-	LF_SIGNATURE   = 0x666C     // "lf" - Index leaf
-	LH_SIGNATURE   = 0x686C     // "lh" - Fast leaf
-	RI_SIGNATURE   = 0x6972     // "ri" - Index root
+	HIVE_SIGNATURE = 0x66676572
+	NK_SIGNATURE   = 0x6B6E
+	VK_SIGNATURE   = 0x6B76
+	LF_SIGNATURE   = 0x666C
+	LH_SIGNATURE   = 0x686C
+	RI_SIGNATURE   = 0x6972
 )
 
 type RegistryHive struct {
@@ -104,7 +104,6 @@ func (h *RegistryHive) ReadNKRecord(offset int32) (*NKRecord, error) {
 	classNameOffset := int32(binary.LittleEndian.Uint32(cell[0x30:0x34]))
 	nameLength := binary.LittleEndian.Uint16(cell[0x48:0x4A])
 	classNameLength := binary.LittleEndian.Uint16(cell[0x4A:0x4C])
-	
 	totalSubkeys := stableSubkeyCount + volatileSubkeyCount
 	
 	nk := &NKRecord{
@@ -131,7 +130,6 @@ func (h *RegistryHive) ReadNKRecord(offset int32) (*NKRecord, error) {
 			if maxLen > len(classCell) {
 				maxLen = len(classCell)
 			}
-			
 			className := ""
 			for i := 0; i < maxLen; i++ {
 				className += fmt.Sprintf("%02x", classCell[i])
@@ -172,7 +170,6 @@ func (h *RegistryHive) ReadVKRecord(offset int32) (*VKRecord, error) {
 			nameEnd = len(cell)
 		}
 		nameBytes := cell[nameStart:nameEnd]
-		
 		if flags&0x0001 != 0 {
 			vk.Name = string(nameBytes)
 		} else {
