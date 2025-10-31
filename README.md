@@ -63,4 +63,3 @@ service password: postgres
 - administrator privileges
 - go 1.16+
 - github.com/carved4/go-wincall for winapi interaction
-

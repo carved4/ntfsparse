@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 )
 
 func main() {
+	debug.SetGCPercent(-1)
 	fmt.Println("\n╔════════════════════════════════════════════════════════════╗")
 	fmt.Println("║           windows credential extractor                    ║")
 	fmt.Println("║         sam/system direct ntfs registry parser            ║")
