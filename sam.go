@@ -139,7 +139,7 @@ func parseSAM(data []byte, bootKey []byte) {
 									for i := 0; i < 16 && i < len(decryptedHash); i++ {
 										fmt.Printf("%02x", decryptedHash[i])
 									}
-									fmt.Printf("\n")
+									fmt.Printf("\n\n")
 									
 									emptyPasswordHash := "31d6cfe0d16ae931b73c59d7e0c089c0"
 									actualHash := ""

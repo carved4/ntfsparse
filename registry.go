@@ -143,17 +143,23 @@ func (h *RegistryHive) ReadNKRecord(offset int32) (*NKRecord, error) {
 
 func (h *RegistryHive) ReadVKRecord(offset int32) (*VKRecord, error) {
 	cell := h.GetCell(offset)
-	if cell == nil || len(cell) < 0x18 {
-		return nil, fmt.Errorf("invalid cell")
+	if cell == nil {
+		return nil, fmt.Errorf("invalid cell (GetCell returned nil)")
+	}
+	if len(cell) < 0x14 {
+		return nil, fmt.Errorf("invalid cell (size: %d, need at least 0x14)", len(cell))
 	}
 	
 	signature := binary.LittleEndian.Uint16(cell[0:2])
 	if signature != VK_SIGNATURE {
-		return nil, fmt.Errorf("invalid VK signature")
+		return nil, fmt.Errorf("invalid VK signature: 0x%04x (expected 0x%04x)", signature, VK_SIGNATURE)
 	}
 	
 	nameLen := binary.LittleEndian.Uint16(cell[2:4])
-	flags := binary.LittleEndian.Uint16(cell[16:18])
+	var flags uint16
+	if len(cell) >= 18 {
+		flags = binary.LittleEndian.Uint16(cell[16:18])
+	}
 	
 	vk := &VKRecord{
 		Signature:  signature,
@@ -276,6 +282,7 @@ func (h *RegistryHive) GetValues(nk *NKRecord) []*VKRecord {
 	
 	return values
 }
+
 
 func (h *RegistryHive) FindKey(path string) (*NKRecord, error) {
 	parts := strings.Split(path, "\\")

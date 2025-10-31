@@ -52,21 +52,178 @@ func extractBootKey(hive *RegistryHive) []byte {
 	return bootKey
 }
 
-func decryptAES(key, iv, data []byte) []byte {
-	block, err := aes.NewCipher(key)
+func extractLSAKey(systemHive *RegistryHive, bootKey []byte) []byte {
+	lsaKey, err := systemHive.FindKey("ControlSet001\\Control\\Lsa")
 	if err != nil {
 		return nil
 	}
 	
-	if len(data)%aes.BlockSize != 0 {
+	values := systemHive.GetValues(lsaKey)
+	var encryptedLSAKey []byte
+	
+	for _, vk := range values {
+		if vk.Name == "PolSecretEncryptionKey" {
+			encryptedLSAKey = vk.Data
+			break
+		}
+	}
+	
+	if encryptedLSAKey == nil {
+		for _, vk := range values {
+			if vk.Name == "PolEKList" {
+				encryptedLSAKey = vk.Data
+				break
+			}
+		}
+	}
+	
+	if encryptedLSAKey == nil {
+		for _, vk := range values {
+			if len(vk.Data) >= 60 && (vk.DataType == 3 || vk.DataType == 1) {
+				if vk.Data[0] == 0x00 || vk.Data[4] == 0x00 {
+					encryptedLSAKey = vk.Data
+					break
+				}
+			}
+		}
+	}
+	
+	if encryptedLSAKey == nil || len(encryptedLSAKey) < 28 {
 		return nil
 	}
 	
-	mode := cipher.NewCBCDecrypter(block, iv)
-	decrypted := make([]byte, len(data))
-	mode.CryptBlocks(decrypted, data)
+	return decryptLSAKeyData(encryptedLSAKey, bootKey)
+}
+
+
+func decryptLSA(value []byte, bootKey []byte, vistaStyle bool) []byte {
+	if vistaStyle {
+
+		if len(value) < 28 {
+			return nil
+		}
+
+		encryptedData := value[28:]
+		
+		if len(encryptedData) < 32 {
+			return nil
+		}
+		
+		salt := encryptedData[:32]
+		
+		tmpKey := sha256Key(bootKey, salt) 
+		
+		cipherText := encryptedData[32:]
+		
+		plainText := decryptAES(tmpKey, make([]byte, 16), cipherText)  // zero IV
+		
+		if plainText == nil {
+			return nil
+		}
+
+		
+		if len(plainText) < 16 {
+			return nil
+		}
+		
+		length := binary.LittleEndian.Uint32(plainText[0:4])
+		
+		if len(plainText) < 16+int(length) {
+			return nil
+		}
+		
+		secret := plainText[16:16+length]
+		
+		if len(secret) < 84 { 
+			return nil
+		}
+		
+		lsaKey := secret[52:84]  
+		
+		return lsaKey
+	} else {
+		return nil
+	}
+}
+
+
+func sha256Key(key []byte, value []byte) []byte {
+	h := sha256.New()
+	h.Write(key)
+	for i := 0; i < 1000; i++ {
+		h.Write(value)
+	}
+	return h.Sum(nil)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func decryptLSAKeyData(encryptedLSAKey []byte, bootKey []byte) []byte {
+	return decryptLSA(encryptedLSAKey, bootKey, true) 
+}
+
+func decryptAES(key, iv, data []byte) []byte {
+	var plainText []byte
 	
-	return decrypted
+	zeroIV := make([]byte, 16)
+	isZeroIV := true
+	for i := 0; i < len(iv) && i < 16; i++ {
+		if iv[i] != 0 {
+			isZeroIV = false
+			break
+		}
+	}
+	
+	if isZeroIV {
+		for index := 0; index < len(data); index += 16 {
+			block, err := aes.NewCipher(key)
+			if err != nil {
+				return nil
+			}
+			
+			mode := cipher.NewCBCDecrypter(block, zeroIV)
+			
+			cipherBuffer := data[index:index+16]
+			if len(cipherBuffer) < 16 {
+				padded := make([]byte, 16)
+				copy(padded, cipherBuffer)
+				cipherBuffer = padded
+			}
+			
+			decrypted := make([]byte, 16)
+			mode.CryptBlocks(decrypted, cipherBuffer)
+			plainText = append(plainText, decrypted...)
+		}
+	} else {
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			return nil
+		}
+		
+		if len(data)%aes.BlockSize != 0 {
+			return nil
+		}
+		
+		mode := cipher.NewCBCDecrypter(block, iv)
+		plainText = make([]byte, len(data))
+		mode.CryptBlocks(plainText, data)
+	}
+	
+	return plainText
+}
+
+func deriveSHA256Key(key []byte, salt []byte) []byte {
+	h := sha256.New()
+	h.Write(key)
+	for i := 0; i < 1000; i++ {
+		h.Write(salt)
+	}
+	return h.Sum(nil)
 }
 
 func decryptSingleDES(key, data []byte) []byte {
