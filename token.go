@@ -11,12 +11,11 @@ func logonUserNonDomainJoined(user string, pass string) uintptr {
 	a32Base := wc.LoadLibraryLdr("advapi32.dll")
 	logonUserW := wc.GetFunctionAddress(a32Base, wc.GetHash("LogonUserW"))
 	getLastError := wc.GetFunctionAddress(wc.GetModuleBase(wc.GetHash("kernel32.dll")), wc.GetHash("GetLastError"))
-	username := user
 	domain := "."
 	logonType := uintptr(3)
 	provider := uintptr(0)
 
-	userPtr16, _ := wc.UTF16ptr(username)
+	userPtr16, _ := wc.UTF16ptr(user)
 	userPtr := uintptr(unsafe.Pointer(userPtr16))
 	domainPtr16, _ := wc.UTF16ptr(domain)
 	domainPtr := uintptr(unsafe.Pointer(domainPtr16))
