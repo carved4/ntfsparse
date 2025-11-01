@@ -11,7 +11,7 @@ func logonUserNonDomainJoined(user string, pass string) uintptr {
 	a32Base := wc.LoadLibraryLdr("advapi32.dll")
 	logonUserW := wc.GetFunctionAddress(a32Base, wc.GetHash("LogonUserW"))
 	getLastError := wc.GetFunctionAddress(wc.GetModuleBase(wc.GetHash("kernel32.dll")), wc.GetHash("GetLastError"))
-	username := "postgres"
+	username := user
 	domain := "."
 	logonType := uintptr(3)
 	provider := uintptr(0)
@@ -40,7 +40,7 @@ func logonUserDomainJoined(user string, pass string, domain string) uintptr {
 	a32Base := wc.LoadLibraryLdr("advapi32.dll")
 	logonUserW := wc.GetFunctionAddress(a32Base, wc.GetHash("LogonUserW"))
 	getLastError := wc.GetFunctionAddress(wc.GetModuleBase(wc.GetHash("kernel32.dll")), wc.GetHash("GetLastError"))
-	username := "postgres"
+	username := user
 	logonType := uintptr(3)
 	provider := uintptr(0)
 
