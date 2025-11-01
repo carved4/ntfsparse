@@ -174,18 +174,21 @@ func parseSAM(data []byte, bootKey []byte) {
 	}
 }
 
-func parseSYSTEM(data []byte) []byte {
+func parseSYSTEM(data []byte) ([]byte, string, bool) {
 	hive, err := parseHive(data)
 	if err != nil {
-		return nil
+		return nil, "", false
 	}
 	
 	_, err = hive.ReadNKRecord(hive.RootCellIndex)
 	if err != nil {
-		return nil
+		return nil, "", false
 	}
 	
 	bootKey := extractBootKey(hive)
+	domainName := "WORKGROUP"
+	isDomainJoined := false
+	
 	if bootKey != nil {
 		fmt.Printf("[+] bootkey: ")
 		for _, b := range bootKey {
@@ -203,8 +206,31 @@ func parseSYSTEM(data []byte) []byte {
 				}
 			}
 		}
+		
+		// Extract domain information
+		tcpipKey, err := hive.FindKey("ControlSet001\\Services\\Tcpip\\Parameters")
+		if err == nil {
+			values := hive.GetValues(tcpipKey)
+			for _, vk := range values {
+				if strings.EqualFold(vk.Name, "Domain") && vk.DataType == 1 {
+					domain := utf16ToString(vk.Data)
+					if domain != "" && domain != "WORKGROUP" {
+						domainName = domain
+						isDomainJoined = true
+						fmt.Printf("[+] domain: %s (domain-joined)\n", domain)
+					} else {
+						domainName = domain
+						fmt.Printf("[+] domain: %s (workgroup)\n", domain)
+					}
+					break
+				}
+			}
+		} else {
+			// Fallback: check if we can find domain info elsewhere
+			fmt.Printf("[+] domain: WORKGROUP (not domain-joined)\n")
+		}
 	}
 	
-	return bootKey
+	return bootKey, domainName, isDomainJoined
 }
 

