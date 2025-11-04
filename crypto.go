@@ -288,3 +288,104 @@ func decryptHashRC4(encryptedHash []byte, bootKey []byte, rid uint32) []byte {
 
 	return decrypted
 }
+
+func decryptPEK(encryptedPEK []byte, bootKey []byte) []byte {
+	if len(encryptedPEK) < 8 {
+		return nil
+	}
+
+	version := binary.LittleEndian.Uint32(encryptedPEK[0:4])
+
+	if version == 2 || version == 3 {
+		if len(encryptedPEK) < 32 {
+			return nil
+		}
+
+		salt := encryptedPEK[8:24] 
+		rounds := binary.LittleEndian.Uint32(encryptedPEK[24:28])
+		cipherText := encryptedPEK[28:] 
+
+		if rounds > 100000 {
+			rounds = 1000 
+		}
+
+		h := sha256.New()
+		h.Write(bootKey)
+		for i := 0; i < int(rounds); i++ {
+			h.Write(salt)
+		}
+		derivedKey := h.Sum(nil)
+
+		key := derivedKey[:32]
+		iv := make([]byte, 16)
+		decrypted := decryptAES(key, iv, cipherText)
+		
+		if decrypted == nil || len(decrypted) < 16 {
+			return nil
+		}
+
+		if len(decrypted) >= 20 {
+			return decrypted[4:20]
+		}
+		
+		return decrypted
+	}
+
+	if len(encryptedPEK) < 24 {
+		return nil
+	}
+
+	salt := encryptedPEK[8:24]
+	cipherText := encryptedPEK[24:]
+	
+	h := md5.New()
+	h.Write(bootKey)
+	h.Write(salt)
+	rc4Key := h.Sum(nil)
+
+	cipher, err := rc4.NewCipher(rc4Key)
+	if err != nil {
+		return nil
+	}
+
+	decrypted := make([]byte, len(cipherText))
+	cipher.XORKeyStream(decrypted, cipherText)
+
+	if len(decrypted) >= 20 {
+		return decrypted[4:20]
+	}
+
+	return decrypted
+}
+
+func decryptHashWithPEK(encryptedHash []byte, pek []byte) []byte {
+	if len(encryptedHash) < 20 {
+		return nil
+	}
+
+	if len(encryptedHash) < 24 {
+		return nil
+	}
+
+	salt := encryptedHash[8:24]
+	cipherText := encryptedHash[24:]
+
+	if len(cipherText) < 16 {
+		return nil
+	}
+
+	h := md5.New()
+	h.Write(pek)
+	h.Write(salt)
+	key := h.Sum(nil)
+
+	cipher, err := rc4.NewCipher(key)
+	if err != nil {
+		return nil
+	}
+
+	decrypted := make([]byte, 16)
+	cipher.XORKeyStream(decrypted, cipherText[:16])
+
+	return decrypted
+}
