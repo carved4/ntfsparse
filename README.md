@@ -94,7 +94,7 @@ LESA_SWEET:c4167630073c86bda914da95b9ace11a
 EVANGELINA_COMBS:7fe0e096b1f9aed1f7fa62fa6c00210e
 ... and 2581 more
 ```
-
+github i hate you please stop ai generating commit messages when i change readme stuff from web ui </3
 ## requirements
 
 - windows os
